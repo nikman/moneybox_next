@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.niku.moneybox.core.database.AppDatabase
 import com.niku.moneybox.core.database.backup.BackupManager
+import com.niku.moneybox.core.database.csv.CsvImporter
 import com.niku.moneybox.core.database.dao.CategoryDao
 import com.niku.moneybox.core.database.dao.TransactionDao
 import com.niku.moneybox.core.database.dao.WalletDao
@@ -109,9 +110,6 @@ class WalletsViewModel(
         initialValue = WalletsUiState(isLoading = true)
     )
 
-    /**
-     * Быстрое создание нового тега и возврат его ID.
-     */
     fun createTag(name: String, onCreated: ((Long) -> Unit)? = null) {
         val cleanName = name.trim()
         if (cleanName.isBlank()) return
@@ -311,6 +309,25 @@ class WalletsViewModel(
                 onResult(true, "Данные базы успешно восстановлены")
             }.onFailure { error ->
                 onResult(false, "Ошибка импорта: ${error.localizedMessage}")
+            }
+        }
+    }
+
+    /**
+     * Умный импорт из CSV выписки.
+     */
+    fun importCsv(context: Context, uri: Uri, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            runCatching {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                    ?: throw IllegalStateException("Не удалось открыть CSV файл для чтения")
+                val csvImporter = CsvImporter(database)
+                csvImporter.importCsv(inputStream).getOrThrow()
+            }.onSuccess { result ->
+                val message = "Успешно импортировано из CSV:\n• Операций: ${result.transactionsCount}\n• Счетов: ${result.walletsCount}\n• Категорий: ${result.categoriesCount}\n• Тегов: ${result.tagsCount}"
+                onResult(true, message)
+            }.onFailure { error ->
+                onResult(false, "Ошибка импорта CSV: ${error.localizedMessage}")
             }
         }
     }

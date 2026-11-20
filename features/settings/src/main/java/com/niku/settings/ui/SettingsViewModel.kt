@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.niku.moneybox.core.database.AppDatabase
 import com.niku.moneybox.core.database.backup.BackupManager
+import com.niku.moneybox.core.database.csv.CsvImporter
 import com.niku.network.repository.CurrencyRepository
 import com.niku.preferences.AppPreferences
 import kotlinx.coroutines.flow.StateFlow
@@ -55,7 +56,7 @@ class SettingsViewModel(
     }
 
     /**
-     * Импорт резервной копии.
+     * Импорт резервной копии из JSON.
      */
     fun importBackup(context: Context, uri: Uri, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
@@ -67,6 +68,25 @@ class SettingsViewModel(
                 onResult(true, "Данные базы успешно восстановлены")
             }.onFailure { error ->
                 onResult(false, "Ошибка импорта: ${error.localizedMessage}")
+            }
+        }
+    }
+
+    /**
+     * Умный импорт выписки из CSV-файла.
+     */
+    fun importCsv(context: Context, uri: Uri, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            runCatching {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                    ?: throw IllegalStateException("Не удалось открыть CSV файл для чтения")
+                val csvImporter = CsvImporter(database)
+                csvImporter.importCsv(inputStream).getOrThrow()
+            }.onSuccess { result ->
+                val message = "Импортировано: ${result.transactionsCount} операций, ${result.walletsCount} кошельков, ${result.categoriesCount} категорий, ${result.tagsCount} тегов."
+                onResult(true, message)
+            }.onFailure { error ->
+                onResult(false, "Ошибка импорта CSV: ${error.localizedMessage}")
             }
         }
     }

@@ -43,7 +43,7 @@ import androidx.compose.ui.unit.dp
 import com.niku.preferences.CurrencyFormatter
 
 /**
- * UI-экран Настроек приложения MoneyBox.
+ * UI-экран Настроек приложения MoneyBox с поддержкой резервного копирования и CSV-импорта.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,7 +56,7 @@ fun SettingsScreen(
 
     val availableCurrencies = remember { listOf("RUB", "USD", "EUR", "CNY", "KZT", "BYN", "GBP", "TRY", "AED") }
 
-    // SAF Лаунчеры для экспорта и импорта бэкапа
+    // SAF Лаунчеры
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
@@ -76,6 +76,16 @@ fun SettingsScreen(
         uri?.let { fileUri ->
             pendingImportUri = fileUri
             showImportConfirmDialog = true
+        }
+    }
+
+    val csvImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { fileUri ->
+            viewModel.importCsv(context, fileUri) { _, message ->
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -133,7 +143,7 @@ fun SettingsScreen(
                 }
             }
 
-            // 2. РАЗДЕЛ: Резервное копирование и Восстановление (JSON Backup)
+            // 2. РАЗДЕЛ: Импорт банковских выписок (CSV)
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -142,14 +152,49 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = "Резервное копирование",
+                            text = "Импорт выписки из CSV",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                            text = "Экспорт и импорт всех кошельков, транзакций и категорий в один JSON-файл.",
+                            text = "Автоматический импорт транзакций, автосоздание кошельков, категорий, сведение переводов и привязка тегов.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(
+                            onClick = {
+                                csvImportLauncher.launch(arrayOf("*/*", "text/csv"))
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Выбрать CSV-файл выписки")
+                        }
+                    }
+                }
+            }
+
+            // 3. РАЗДЕЛ: Резервное копирование и Восстановление (JSON Backup)
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Резервное копирование JSON",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "Полный экспорт и импорт базы данных MoneyBox.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -182,7 +227,7 @@ fun SettingsScreen(
                 }
             }
 
-            // 3. РАЗДЕЛ: О приложении
+            // 4. РАЗДЕЛ: О приложении
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),

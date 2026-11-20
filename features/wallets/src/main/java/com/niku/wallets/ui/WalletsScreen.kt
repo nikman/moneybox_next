@@ -76,7 +76,7 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Главный экран кошельков с поддержкой отображения тегов для операций.
+ * Главный экран кошельков с поддержкой импорта выписок CSV.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -136,6 +136,16 @@ fun WalletsScreen(
         }
     }
 
+    val csvImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { fileUri ->
+            viewModel.importCsv(context, fileUri) { _, message ->
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -143,6 +153,13 @@ fun WalletsScreen(
                 actions = {
                     IconButton(onClick = { showCategoriesScreen = true }) {
                         Icon(imageVector = Icons.Default.List, contentDescription = "Категории")
+                    }
+                    IconButton(
+                        onClick = {
+                            csvImportLauncher.launch(arrayOf("*/*", "text/csv"))
+                        }
+                    ) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = "Импорт CSV")
                     }
                     IconButton(
                         onClick = {
