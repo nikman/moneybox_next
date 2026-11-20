@@ -9,6 +9,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -57,7 +59,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.niku.moneybox.core.database.model.CategoryEntity
+import com.niku.moneybox.core.database.model.TagEntity
 import com.niku.moneybox.core.database.model.TransactionEntity
 import com.niku.moneybox.core.database.model.TransactionType
 import com.niku.moneybox.core.database.model.WalletEntity
@@ -72,7 +76,7 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Главный экран кошельков с поддержкой редактирования кошельков при клике на карточку.
+ * Главный экран кошельков с поддержкой отображения тегов для операций.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,6 +101,9 @@ fun WalletsScreen(
     }
     val walletMap = remember(uiState.wallets) {
         uiState.wallets.associateBy { it.id }
+    }
+    val txWithTagsMap = remember(uiState.transactionsWithTags) {
+        uiState.transactionsWithTags.associateBy { it.transaction.id }
     }
 
     if (showCategoriesScreen) {
@@ -250,6 +257,7 @@ fun WalletsScreen(
                     items(uiState.transactions, key = { it.id }) { transaction ->
                         val category = transaction.categoryId?.let { categoryMap[it] }
                         val walletCurrency = (transaction.fromWalletId ?: transaction.toWalletId)?.let { walletMap[it]?.currency } ?: uiState.defaultCurrency
+                        val tags = txWithTagsMap[transaction.id]?.tags ?: emptyList()
 
                         val dismissState = rememberSwipeToDismissBoxState(
                             confirmValueChange = { dismissValue ->
@@ -288,6 +296,7 @@ fun WalletsScreen(
                                 TransactionItem(
                                     transaction = transaction,
                                     category = category,
+                                    tags = tags,
                                     walletCurrency = walletCurrency,
                                     onClick = {
                                         pendingEditTransaction = transaction
@@ -301,7 +310,6 @@ fun WalletsScreen(
         }
     }
 
-    // Диалог редактирования существующего кошелька при клике на карточку
     if (pendingEditWallet != null) {
         val walletToEdit = pendingEditWallet!!
         AddWalletDialog(
@@ -356,19 +364,25 @@ fun WalletsScreen(
     if (pendingEditTransaction != null) {
         val oldTx = pendingEditTransaction!!
         val walletId = oldTx.fromWalletId ?: oldTx.toWalletId ?: 0L
+        val currentTxTags = txWithTagsMap[oldTx.id]?.tags?.map { it.id } ?: emptyList()
 
         AddTransactionDialog(
             wallets = uiState.wallets,
             categories = uiState.categories,
+            allTags = uiState.tags,
             initialAmount = oldTx.amount,
             initialType = oldTx.type,
             initialWalletId = walletId,
             initialCategoryId = oldTx.categoryId,
             initialComment = oldTx.comment,
             initialDate = oldTx.date,
+            initialSelectedTagIds = currentTxTags,
             isEditing = true,
             onDismiss = { pendingEditTransaction = null },
-            onConfirm = { amount, type, selectedWalletId, categoryId, comment, date ->
+            onCreateNewTag = { tagName, callback ->
+                viewModel.createTag(tagName, callback)
+            },
+            onConfirm = { amount, type, selectedWalletId, categoryId, comment, date, tagIds ->
                 val newTx = oldTx.copy(
                     amount = amount,
                     type = type,
@@ -378,7 +392,7 @@ fun WalletsScreen(
                     comment = comment,
                     date = date
                 )
-                viewModel.updateTransaction(oldTx, newTx)
+                viewModel.updateTransaction(oldTx, newTx, tagIds)
                 pendingEditTransaction = null
             }
         )
@@ -426,9 +440,13 @@ fun WalletsScreen(
         AddTransactionDialog(
             wallets = uiState.wallets,
             categories = uiState.categories,
+            allTags = uiState.tags,
             onDismiss = { showAddTransactionDialog = false },
-            onConfirm = { amount, type, walletId, categoryId, comment, date ->
-                viewModel.addTransaction(amount, type, walletId, categoryId, comment, date)
+            onCreateNewTag = { tagName, callback ->
+                viewModel.createTag(tagName, callback)
+            },
+            onConfirm = { amount, type, walletId, categoryId, comment, date, tagIds ->
+                viewModel.addTransaction(amount, type, walletId, categoryId, comment, date, tagIds)
                 showAddTransactionDialog = false
             }
         )
@@ -528,10 +546,12 @@ fun formatRelativeDate(timestamp: Long): String {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TransactionItem(
     transaction: TransactionEntity,
     category: CategoryEntity?,
+    tags: List<TagEntity> = emptyList(),
     walletCurrency: String,
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -576,6 +596,29 @@ fun TransactionItem(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                if (tags.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        tags.forEach { tag ->
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                            ) {
+                                Text(
+                                    text = "#${tag.name}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+                    }
+                }
             }
             Text(
                 text = "$sign${String.format(Locale.getDefault(), "%,.2f %s", transaction.amount, currencySymbol)}",

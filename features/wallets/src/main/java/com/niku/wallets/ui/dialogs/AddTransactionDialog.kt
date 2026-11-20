@@ -1,17 +1,22 @@
 package com.niku.wallets.ui.dialogs
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
@@ -23,6 +28,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -37,10 +43,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.niku.moneybox.core.database.model.CategoryEntity
 import com.niku.moneybox.core.database.model.CategoryType
+import com.niku.moneybox.core.database.model.TagEntity
 import com.niku.moneybox.core.database.model.TransactionType
 import com.niku.moneybox.core.database.model.WalletEntity
 import java.text.SimpleDateFormat
@@ -50,22 +58,25 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Диалог создания или редактирования финансовой операции (Доход / Расход) с поддержкой выбора даты и времени.
+ * Диалог создания или редактирования финансовой операции с поддержкой множественного выбора тегов и быстрого добавления новых тегов.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddTransactionDialog(
     wallets: List<WalletEntity>,
     categories: List<CategoryEntity>,
+    allTags: List<TagEntity> = emptyList(),
     initialAmount: Double? = null,
     initialType: TransactionType = TransactionType.EXPENSE,
     initialWalletId: Long? = null,
     initialCategoryId: Long? = null,
     initialComment: String? = null,
     initialDate: Long = System.currentTimeMillis(),
+    initialSelectedTagIds: List<Long> = emptyList(),
     isEditing: Boolean = false,
     onDismiss: () -> Unit,
-    onConfirm: (amount: Double, type: TransactionType, walletId: Long, categoryId: Long?, comment: String?, date: Long) -> Unit
+    onCreateNewTag: ((name: String, onCreated: (Long) -> Unit) -> Unit)? = null,
+    onConfirm: (amount: Double, type: TransactionType, walletId: Long, categoryId: Long?, comment: String?, date: Long, selectedTagIds: List<Long>) -> Unit
 ) {
     var amountText by remember { mutableStateOf(initialAmount?.toString() ?: "") }
     var selectedType by remember { mutableStateOf(initialType) }
@@ -77,7 +88,9 @@ fun AddTransactionDialog(
     }
     var comment by remember { mutableStateOf(initialComment ?: "") }
     var selectedDateMillis by remember { mutableStateOf(initialDate) }
+    var selectedTagIds by remember { mutableStateOf(initialSelectedTagIds.toSet()) }
 
+    var newTagText by remember { mutableStateOf("") }
     var walletExpanded by remember { mutableStateOf(false) }
     var categoryExpanded by remember { mutableStateOf(false) }
 
@@ -112,15 +125,14 @@ fun AddTransactionDialog(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-                // Поле выбора даты и времени
                 DateTimePickerField(
                     selectedTimestamp = selectedDateMillis,
                     onTimestampSelected = { selectedDateMillis = it }
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedTextField(
                     value = amountText,
@@ -131,9 +143,9 @@ fun AddTransactionDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-                // Селектор кошелька
+                // Кошелек
                 ExposedDropdownMenuBox(
                     expanded = walletExpanded,
                     onExpandedChange = { walletExpanded = !walletExpanded }
@@ -165,9 +177,9 @@ fun AddTransactionDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-                // Селектор категории
+                // Категория
                 ExposedDropdownMenuBox(
                     expanded = categoryExpanded,
                     onExpandedChange = { categoryExpanded = !categoryExpanded }
@@ -209,7 +221,7 @@ fun AddTransactionDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedTextField(
                     value = comment,
@@ -218,6 +230,68 @@ fun AddTransactionDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // РАЗДЕЛ ТЕГОВ
+                Text(
+                    text = "Теги",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                if (allTags.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        allTags.forEach { tag ->
+                            val isSelected = selectedTagIds.contains(tag.id)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    selectedTagIds = if (isSelected) {
+                                        selectedTagIds - tag.id
+                                    } else {
+                                        selectedTagIds + tag.id
+                                    }
+                                },
+                                label = { Text("#${tag.name}") }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // Ввод нового тега
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = newTagText,
+                        onValueChange = { newTagText = it },
+                        label = { Text("+ Новый тег (например: такси)") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = {
+                            if (newTagText.isNotBlank()) {
+                                val tagToAdd = newTagText
+                                newTagText = ""
+                                onCreateNewTag?.invoke(tagToAdd) { createdId ->
+                                    selectedTagIds = selectedTagIds + createdId
+                                }
+                            }
+                        }
+                    ) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = "Добавить тег")
+                    }
+                }
             }
         },
         confirmButton = {
@@ -226,7 +300,7 @@ fun AddTransactionDialog(
                     val amount = amountText.toDoubleOrNull()
                     val wallet = selectedWallet
                     if (amount != null && amount > 0 && wallet != null) {
-                        onConfirm(amount, selectedType, wallet.id, selectedCategory?.id, comment.ifBlank { null }, selectedDateMillis)
+                        onConfirm(amount, selectedType, wallet.id, selectedCategory?.id, comment.ifBlank { null }, selectedDateMillis, selectedTagIds.toList())
                     }
                 }
             ) {
@@ -274,7 +348,6 @@ fun DateTimePickerField(
         )
     }
 
-    // 1. Диалог выбора даты (DatePickerDialog)
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
             initialSelectedDateMillis = selectedTimestamp
@@ -314,7 +387,6 @@ fun DateTimePickerField(
         }
     }
 
-    // 2. Диалог выбора времени (TimePicker)
     if (showTimePicker) {
         val initialCal = Calendar.getInstance().apply { timeInMillis = selectedTimestamp }
         val timePickerState = rememberTimePickerState(

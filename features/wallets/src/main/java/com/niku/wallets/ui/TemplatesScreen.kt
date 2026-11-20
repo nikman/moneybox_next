@@ -137,6 +137,7 @@ fun TemplatesScreen(
         AddTransactionDialog(
             wallets = uiState.wallets,
             categories = uiState.categories,
+            allTags = uiState.tags,
             initialAmount = tmpl.amount,
             initialType = tmpl.type,
             initialWalletId = tmpl.walletId,
@@ -144,8 +145,11 @@ fun TemplatesScreen(
             initialComment = tmpl.name,
             isEditing = false,
             onDismiss = { pendingQuickTransactionTemplate = null },
-            onConfirm = { amount, type, walletId, categoryId, comment, date ->
-                viewModel.addTransaction(amount, type, walletId, categoryId, comment, date)
+            onCreateNewTag = { tagName, callback ->
+                viewModel.createTag(tagName, callback)
+            },
+            onConfirm = { amount, type, walletId, categoryId, comment, date, selectedTagIds ->
+                viewModel.addTransaction(amount, type, walletId, categoryId, comment, date, selectedTagIds)
                 pendingQuickTransactionTemplate = null
             }
         )

@@ -11,26 +11,32 @@ import com.niku.moneybox.core.database.dao.TransactionDao
 import com.niku.moneybox.core.database.dao.WalletDao
 import com.niku.moneybox.core.database.model.CategoryEntity
 import com.niku.moneybox.core.database.model.PaymentTemplateEntity
+import com.niku.moneybox.core.database.model.TagEntity
 import com.niku.moneybox.core.database.model.TransactionEntity
+import com.niku.moneybox.core.database.model.TransactionTagCrossRef
 import com.niku.moneybox.core.database.model.WalletEntity
 
 /**
- * Главный класс базы данных Room модуля :core:database.
+ * Главный класс базы данных Room модуля :core:database (Версия 3).
  *
  * Регистрирует сущности:
  * - [WalletEntity]
  * - [TransactionEntity]
  * - [CategoryEntity]
  * - [PaymentTemplateEntity]
+ * - [TagEntity]
+ * - [TransactionTagCrossRef]
  */
 @Database(
     entities = [
         WalletEntity::class,
         TransactionEntity::class,
         CategoryEntity::class,
-        PaymentTemplateEntity::class
+        PaymentTemplateEntity::class,
+        TagEntity::class,
+        TransactionTagCrossRef::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(RoomConverters::class)
@@ -48,7 +54,7 @@ abstract class AppDatabase : RoomDatabase() {
         const val DATABASE_NAME = "moneybox_database.db"
 
         /**
-         * Room Callback для первичного наполнения БД категориями при первом запуске.
+         * Room Callback для первичного наполнения БД базовыми категориями и тегами при первом запуске.
          */
         val PREPOPULATE_CALLBACK = object : RoomDatabase.Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
@@ -67,6 +73,12 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("INSERT INTO categories (name, type, icon, color) VALUES ('Подработка', 'INCOME', 'work', '#1E88E5')")
                 db.execSQL("INSERT INTO categories (name, type, icon, color) VALUES ('Кэшбэк', 'INCOME', 'savings', '#FB8C00')")
                 db.execSQL("INSERT INTO categories (name, type, icon, color) VALUES ('Подарки', 'INCOME', 'card_giftcard', '#E53935')")
+
+                // Начальные популярные теги
+                db.execSQL("INSERT INTO tags (name) VALUES ('срочно')")
+                db.execSQL("INSERT INTO tags (name) VALUES ('отпуск')")
+                db.execSQL("INSERT INTO tags (name) VALUES ('семья')")
+                db.execSQL("INSERT INTO tags (name) VALUES ('работа')")
             }
         }
     }

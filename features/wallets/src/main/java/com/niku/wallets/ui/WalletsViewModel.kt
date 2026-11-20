@@ -13,8 +13,10 @@ import com.niku.moneybox.core.database.dao.WalletDao
 import com.niku.moneybox.core.database.model.CategoryEntity
 import com.niku.moneybox.core.database.model.CategoryType
 import com.niku.moneybox.core.database.model.PaymentTemplateEntity
+import com.niku.moneybox.core.database.model.TagEntity
 import com.niku.moneybox.core.database.model.TransactionEntity
 import com.niku.moneybox.core.database.model.TransactionType
+import com.niku.moneybox.core.database.model.TransactionWithTags
 import com.niku.moneybox.core.database.model.WalletEntity
 import com.niku.moneybox.core.database.model.WalletType
 import com.niku.preferences.AppPreferences
@@ -26,13 +28,15 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
- * Состояние UI для экрана управления кошельками.
+ * Состояние UI для экрана управления кошельками (с поддержкой тегов).
  */
 data class WalletsUiState(
     val wallets: List<WalletEntity> = emptyList(),
     val transactions: List<TransactionEntity> = emptyList(),
+    val transactionsWithTags: List<TransactionWithTags> = emptyList(),
     val categories: List<CategoryEntity> = emptyList(),
     val templates: List<PaymentTemplateEntity> = emptyList(),
+    val tags: List<TagEntity> = emptyList(),
     val defaultCurrency: String = "RUB",
     val cachedRates: Map<String, Double> = emptyMap(),
     val totalBalance: Double = 0.0,
@@ -41,7 +45,7 @@ data class WalletsUiState(
 )
 
 /**
- * ViewModel для управления кошельками, транзакциями, переводами, шаблонами и бэкапом.
+ * ViewModel для управления кошельками, транзакциями, переводами, шаблонами, тегами и бэкапом.
  */
 class WalletsViewModel(
     private val walletDao: WalletDao,
@@ -55,9 +59,10 @@ class WalletsViewModel(
     private val backupManager = BackupManager(database)
 
     private val walletsFlow = walletDao.getWalletsFlow()
-    private val transactionsFlow = transactionDao.getTransactionsFlow()
+    private val transactionsWithTagsFlow = transactionDao.getTransactionsWithTagsFlow()
     private val categoriesFlow = categoryDao.getCategoriesFlow()
     private val templatesFlow = templateDao.getTemplatesFlow()
+    private val tagsFlow = transactionDao.getTagsFlow()
 
     /**
      * Основной StateFlow состояния экрана.
@@ -65,20 +70,23 @@ class WalletsViewModel(
     @Suppress("UNCHECKED_CAST")
     val uiState: StateFlow<WalletsUiState> = combine(
         walletsFlow,
-        transactionsFlow,
+        transactionsWithTagsFlow,
         categoriesFlow,
         templatesFlow,
+        tagsFlow,
         appPreferences.defaultCurrency,
         appPreferences.cachedRates
     ) { flows ->
         val wallets = flows[0] as List<WalletEntity>
-        val transactions = flows[1] as List<TransactionEntity>
+        val txsWithTags = flows[1] as List<TransactionWithTags>
         val categories = flows[2] as List<CategoryEntity>
         val templates = flows[3] as List<PaymentTemplateEntity>
-        val defaultCurrency = flows[4] as String
-        val rates = flows[5] as Map<String, Double>
+        val tags = flows[4] as List<TagEntity>
+        val defaultCurrency = flows[5] as String
+        val rates = flows[6] as Map<String, Double>
 
-        // Расчет общего баланса с конвертацией всех кошельков в базовую валюту
+        val transactions = txsWithTags.map { it.transaction }
+
         val total = wallets.sumOf { wallet ->
             CurrencyFormatter.convert(wallet.balance, wallet.currency, defaultCurrency, rates)
         }
@@ -86,8 +94,10 @@ class WalletsViewModel(
         WalletsUiState(
             wallets = wallets,
             transactions = transactions,
+            transactionsWithTags = txsWithTags,
             categories = categories,
             templates = templates,
+            tags = tags,
             defaultCurrency = defaultCurrency,
             cachedRates = rates,
             totalBalance = total,
@@ -98,6 +108,20 @@ class WalletsViewModel(
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = WalletsUiState(isLoading = true)
     )
+
+    /**
+     * Быстрое создание нового тега и возврат его ID.
+     */
+    fun createTag(name: String, onCreated: ((Long) -> Unit)? = null) {
+        val cleanName = name.trim()
+        if (cleanName.isBlank()) return
+        viewModelScope.launch {
+            runCatching {
+                val tagId = transactionDao.insertTag(TagEntity(name = cleanName))
+                onCreated?.invoke(tagId)
+            }
+        }
+    }
 
     fun createTemplate(
         name: String,
@@ -199,7 +223,8 @@ class WalletsViewModel(
         walletId: Long,
         categoryId: Long? = null,
         comment: String? = null,
-        date: Long = System.currentTimeMillis()
+        date: Long = System.currentTimeMillis(),
+        selectedTagIds: List<Long> = emptyList()
     ) {
         viewModelScope.launch {
             runCatching {
@@ -212,7 +237,7 @@ class WalletsViewModel(
                     date = date,
                     comment = comment
                 )
-                transactionDao.insertTransactionAndUpdateBalance(transaction)
+                transactionDao.insertTransactionWithTags(transaction, selectedTagIds)
             }
         }
     }
@@ -227,11 +252,12 @@ class WalletsViewModel(
 
     fun updateTransaction(
         oldTransaction: TransactionEntity,
-        newTransaction: TransactionEntity
+        newTransaction: TransactionEntity,
+        selectedTagIds: List<Long> = emptyList()
     ) {
         viewModelScope.launch {
             runCatching {
-                transactionDao.updateTransactionAndRecalculateBalance(oldTransaction, newTransaction)
+                transactionDao.updateTransactionWithTags(oldTransaction, newTransaction, selectedTagIds)
             }
         }
     }

@@ -7,20 +7,25 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.niku.moneybox.core.database.model.TagEntity
 import com.niku.moneybox.core.database.model.TransactionEntity
+import com.niku.moneybox.core.database.model.TransactionTagCrossRef
 import com.niku.moneybox.core.database.model.TransactionType
+import com.niku.moneybox.core.database.model.TransactionWithTags
 import kotlinx.coroutines.flow.Flow
 
 /**
- * DAO интерфейс для работы с финансовыми транзакциями.
- *
- * Включает атомарные методы в рамках одной базы данных SQL-транзакции (@Transaction).
+ * DAO интерфейс для работы с финансовыми транзакциями, тегами и их связями (многие-ко-многим).
  */
 @Dao
 interface TransactionDao {
 
     @Query("SELECT * FROM transactions ORDER BY date DESC")
     fun getTransactionsFlow(): Flow<List<TransactionEntity>>
+
+    @Transaction
+    @Query("SELECT * FROM transactions ORDER BY date DESC")
+    fun getTransactionsWithTagsFlow(): Flow<List<TransactionWithTags>>
 
     @Query("SELECT * FROM transactions WHERE date BETWEEN :startDate AND :endDate ORDER BY date DESC")
     fun getTransactionsByPeriodFlow(startDate: Long, endDate: Long): Flow<List<TransactionEntity>>
@@ -46,19 +51,81 @@ interface TransactionDao {
     @Query("DELETE FROM transactions")
     suspend fun deleteAllTransactions()
 
-    /**
-     * Атомарное изменение баланса указанного кошелька на значение [delta].
-     */
+    // ---------- ТЕГИ (TAGS) ----------
+
+    @Query("SELECT * FROM tags ORDER BY name ASC")
+    fun getTagsFlow(): Flow<List<TagEntity>>
+
+    @Query("SELECT * FROM tags")
+    suspend fun getAllTags(): List<TagEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTag(tag: TagEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTags(tags: List<TagEntity>): List<Long>
+
+    @Delete
+    suspend fun deleteTag(tag: TagEntity)
+
+    @Query("DELETE FROM tags")
+    suspend fun deleteAllTags()
+
+    // ---------- СВЯЗИ МНОГИЕ-КО-МНОГИМ (CROSS REF) ----------
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTransactionTagCrossRefs(refs: List<TransactionTagCrossRef>)
+
+    @Query("DELETE FROM transaction_tag_cross_ref WHERE transactionId = :transactionId")
+    suspend fun deleteTransactionTagCrossRefs(transactionId: Long)
+
+    @Query("DELETE FROM transaction_tag_cross_ref")
+    suspend fun deleteAllTransactionTagCrossRefs()
+
+    @Query("SELECT * FROM transaction_tag_cross_ref")
+    suspend fun getAllTransactionTagCrossRefs(): List<TransactionTagCrossRef>
+
+    // ---------- АТОМАРНЫЕ SQL-ТРАНЗАКЦИИ (@Transaction) ----------
+
     @Query("UPDATE wallets SET balance = balance + :delta WHERE id = :walletId")
     suspend fun updateWalletBalance(walletId: Long, delta: Double): Int
 
     /**
-     * Атомарное добавление транзакции и авто-обновление балансов кошельков в рамках единой SQL-транзакции (@Transaction).
-     *
-     * В зависимости от типа транзакции:
-     * - [TransactionType.INCOME] (Доход): Увеличивает баланс целевого кошелька (toWalletId или fromWalletId).
-     * - [TransactionType.EXPENSE] (Расход): Уменьшает баланс исходного кошелька (fromWalletId или toWalletId).
-     * - [TransactionType.TRANSFER] (Перевод): Уменьшает баланс отправителя (fromWalletId) и увеличивает баланс получателя (toWalletId).
+     * Добавление транзакции с привязкой тегов и пересчетом баланса в единой SQL-транзакции.
+     */
+    @Transaction
+    suspend fun insertTransactionWithTags(
+        transaction: TransactionEntity,
+        tagIds: List<Long>
+    ): Long {
+        val txId = insertTransactionAndUpdateBalance(transaction)
+        if (tagIds.isNotEmpty()) {
+            val refs = tagIds.map { tagId -> TransactionTagCrossRef(transactionId = txId, tagId = tagId) }
+            insertTransactionTagCrossRefs(refs)
+        }
+        return txId
+    }
+
+    /**
+     * Обновление транзакции с обновлением связей тегов и баланса в единой SQL-транзакции.
+     */
+    @Transaction
+    suspend fun updateTransactionWithTags(
+        oldTransaction: TransactionEntity,
+        newTransaction: TransactionEntity,
+        tagIds: List<Long>
+    ): Long {
+        deleteTransactionTagCrossRefs(oldTransaction.id)
+        val newTxId = updateTransactionAndRecalculateBalance(oldTransaction, newTransaction)
+        if (tagIds.isNotEmpty()) {
+            val refs = tagIds.map { tagId -> TransactionTagCrossRef(transactionId = newTxId, tagId = tagId) }
+            insertTransactionTagCrossRefs(refs)
+        }
+        return newTxId
+    }
+
+    /**
+     * Атомарное добавление транзакции и авто-обновление балансов кошельков.
      */
     @Transaction
     suspend fun insertTransactionAndUpdateBalance(transaction: TransactionEntity): Long {
@@ -90,10 +157,11 @@ interface TransactionDao {
     }
 
     /**
-     * Атомарное удаление транзакции с автоматическим откатом соответствующих балансов кошельков.
+     * Атомарное удаление транзакции с откатом баланса.
      */
     @Transaction
     suspend fun deleteTransactionAndUpdateBalance(transaction: TransactionEntity): Int {
+        deleteTransactionTagCrossRefs(transaction.id)
         val deletedCount = deleteTransaction(transaction)
         val amount = transaction.amount
         when (transaction.type) {
@@ -121,17 +189,11 @@ interface TransactionDao {
         return deletedCount
     }
 
-    /**
-     * Псевдоним метода для отката баланса при удалении транзакции.
-     */
     @Transaction
     suspend fun deleteTransactionAndRevertBalance(transaction: TransactionEntity): Int {
         return deleteTransactionAndUpdateBalance(transaction)
     }
 
-    /**
-     * Атомарное обновление транзакции (например при редактировании суммы или кошелька).
-     */
     @Transaction
     suspend fun updateTransactionAndUpdateBalance(
         oldTransaction: TransactionEntity,
@@ -141,9 +203,6 @@ interface TransactionDao {
         return insertTransactionAndUpdateBalance(newTransaction)
     }
 
-    /**
-     * Псевдоним метода для пересчета балансов при обновлении транзакции.
-     */
     @Transaction
     suspend fun updateTransactionAndRecalculateBalance(
         oldTransaction: TransactionEntity,

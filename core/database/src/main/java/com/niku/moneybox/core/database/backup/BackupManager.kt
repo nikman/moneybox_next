@@ -33,7 +33,9 @@ class BackupManager(
                 wallets = walletDao.getAllWallets(),
                 transactions = transactionDao.getAllTransactions(),
                 categories = categoryDao.getAllCategories(),
-                templates = templateDao.getAllTemplates()
+                templates = templateDao.getAllTemplates(),
+                tags = transactionDao.getAllTags(),
+                transactionTagCrossRefs = transactionDao.getAllTransactionTagCrossRefs()
             )
 
             val jsonString = gson.toJson(backupData)
@@ -63,6 +65,8 @@ class BackupManager(
 
             // Атомарная очистка и перезапись таблиц
             database.withTransaction {
+                transactionDao.deleteAllTransactionTagCrossRefs()
+                transactionDao.deleteAllTags()
                 transactionDao.deleteAllTransactions()
                 walletDao.deleteAllWallets()
                 categoryDao.deleteAllCategories()
@@ -74,8 +78,14 @@ class BackupManager(
                 if (backupData.categories.isNotEmpty()) {
                     categoryDao.insertCategories(backupData.categories)
                 }
+                if (backupData.tags.isNotEmpty()) {
+                    transactionDao.insertTags(backupData.tags)
+                }
                 if (backupData.transactions.isNotEmpty()) {
                     transactionDao.insertTransactions(backupData.transactions)
+                }
+                if (backupData.transactionTagCrossRefs.isNotEmpty()) {
+                    transactionDao.insertTransactionTagCrossRefs(backupData.transactionTagCrossRefs)
                 }
                 if (backupData.templates.isNotEmpty()) {
                     templateDao.insertTemplates(backupData.templates)
