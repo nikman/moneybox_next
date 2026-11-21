@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -90,6 +92,7 @@ fun WalletsScreen(
 
     var showAddWalletDialog by remember { mutableStateOf(false) }
     var pendingEditWallet by remember { mutableStateOf<WalletEntity?>(null) }
+    var isSortingMode by remember { mutableStateOf(false) }
     var selectedWalletIdForDetails by remember { mutableStateOf<Long?>(null) }
     var showAddTransactionDialog by remember { mutableStateOf(false) }
     var showTransferDialog by remember { mutableStateOf(false) }
@@ -238,11 +241,28 @@ fun WalletsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = "Счета и кошельки",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Счета и кошельки",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+                IconButton(
+                    onClick = { isSortingMode = !isSortingMode },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SwapVert,
+                        contentDescription = "Режим сортировки",
+                        tint = if (isSortingMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
 
             if (uiState.wallets.isEmpty()) {
                 Text(
@@ -256,9 +276,28 @@ fun WalletsScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(uiState.wallets, key = { it.id }) { wallet ->
+                    itemsIndexed(uiState.wallets, key = { _, wallet -> wallet.id }) { index, wallet ->
                         WalletCardItem(
                             wallet = wallet,
+                            isSortingMode = isSortingMode,
+                            canMoveLeft = index > 0,
+                            canMoveRight = index < uiState.wallets.size - 1,
+                            onMoveLeft = {
+                                val mutableList = uiState.wallets.toMutableList()
+                                val temp = mutableList[index]
+                                mutableList[index] = mutableList[index - 1]
+                                mutableList[index - 1] = temp
+                                val updated = mutableList.mapIndexed { idx, w -> w.copy(sortOrder = idx + 1) }
+                                viewModel.updateWallets(updated)
+                            },
+                            onMoveRight = {
+                                val mutableList = uiState.wallets.toMutableList()
+                                val temp = mutableList[index]
+                                mutableList[index] = mutableList[index + 1]
+                                mutableList[index + 1] = temp
+                                val updated = mutableList.mapIndexed { idx, w -> w.copy(sortOrder = idx + 1) }
+                                viewModel.updateWallets(updated)
+                            },
                             onClick = { selectedWalletIdForDetails = wallet.id }
                         )
                     }
@@ -349,18 +388,20 @@ fun WalletsScreen(
         AddWalletDialog(
             initialWallet = walletToEdit,
             defaultCurrency = uiState.defaultCurrency,
+            nextSortOrder = uiState.wallets.size + 1,
             onDismiss = { pendingEditWallet = null },
             onDelete = {
                 viewModel.deleteWallet(walletToEdit.id)
                 pendingEditWallet = null
             },
-            onConfirm = { name, type, currency, balance, excludeFromBalance ->
+            onConfirm = { name, type, currency, balance, excludeFromBalance, sortOrder ->
                 val updated = walletToEdit.copy(
                     name = name,
                     type = type,
                     currency = currency,
                     balance = balance,
-                    excludeFromBalance = excludeFromBalance
+                    excludeFromBalance = excludeFromBalance,
+                    sortOrder = sortOrder
                 )
                 viewModel.updateWallet(updated)
                 pendingEditWallet = null
@@ -457,9 +498,10 @@ fun WalletsScreen(
     if (showAddWalletDialog) {
         AddWalletDialog(
             defaultCurrency = uiState.defaultCurrency,
+            nextSortOrder = uiState.wallets.size + 1,
             onDismiss = { showAddWalletDialog = false },
-            onConfirm = { name, type, currency, initialBalance, excludeFromBalance ->
-                viewModel.createWallet(name, type, currency, initialBalance, excludeFromBalance)
+            onConfirm = { name, type, currency, initialBalance, excludeFromBalance, sortOrder ->
+                viewModel.createWallet(name, type, currency, initialBalance, excludeFromBalance, sortOrder)
                 showAddWalletDialog = false
             }
         )
@@ -523,6 +565,11 @@ fun TotalBalanceCard(
 @Composable
 fun WalletCardItem(
     wallet: WalletEntity,
+    isSortingMode: Boolean = false,
+    canMoveLeft: Boolean = false,
+    canMoveRight: Boolean = false,
+    onMoveLeft: () -> Unit = {},
+    onMoveRight: () -> Unit = {},
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -569,6 +616,43 @@ fun WalletCardItem(
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                 color = if (wallet.excludeFromBalance) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
             )
+
+            if (isSortingMode) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (canMoveLeft) {
+                        TextButton(
+                            onClick = onMoveLeft,
+                            contentPadding = PaddingValues(2.dp),
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Text("<", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.size(28.dp))
+                    }
+                    Text(
+                        text = "${wallet.sortOrder}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (canMoveRight) {
+                        TextButton(
+                            onClick = onMoveRight,
+                            contentPadding = PaddingValues(2.dp),
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Text(">", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.size(28.dp))
+                    }
+                }
+            }
         }
     }
 }

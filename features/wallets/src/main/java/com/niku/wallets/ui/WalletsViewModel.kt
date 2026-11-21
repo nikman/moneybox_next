@@ -188,7 +188,8 @@ class WalletsViewModel(
         type: WalletType,
         currency: String = "RUB",
         initialBalance: Double = 0.0,
-        excludeFromBalance: Boolean = false
+        excludeFromBalance: Boolean = false,
+        sortOrder: Int = 0
     ) {
         viewModelScope.launch {
             runCatching {
@@ -197,7 +198,8 @@ class WalletsViewModel(
                     type = type,
                     currency = currency,
                     balance = initialBalance,
-                    excludeFromBalance = excludeFromBalance
+                    excludeFromBalance = excludeFromBalance,
+                    sortOrder = sortOrder
                 )
                 walletDao.insertWallet(wallet)
             }
@@ -208,6 +210,14 @@ class WalletsViewModel(
         viewModelScope.launch {
             runCatching {
                 walletDao.updateWallet(wallet)
+            }
+        }
+    }
+
+    fun updateWallets(wallets: List<WalletEntity>) {
+        viewModelScope.launch {
+            runCatching {
+                walletDao.updateWallets(wallets)
             }
         }
     }

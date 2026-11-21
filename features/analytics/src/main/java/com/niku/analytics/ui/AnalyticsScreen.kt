@@ -43,9 +43,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.abs
 import com.niku.analytics.model.AnalyticsPeriod
 import com.niku.analytics.model.CategoryChartItem
 import com.niku.analytics.model.MonthlyBalancePoint
@@ -175,6 +179,7 @@ fun MonthlyBalanceChartCard(
                     points = points,
                     selectedPoint = selectedPoint,
                     onPointSelected = { selectedPoint = it },
+                    currencySymbol = currencySymbol,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(200.dp)
@@ -228,17 +233,28 @@ fun MonthlyBalanceCanvasChart(
     points: List<MonthlyBalancePoint>,
     selectedPoint: MonthlyBalancePoint?,
     onPointSelected: (MonthlyBalancePoint) -> Unit,
+    currencySymbol: String = "₽",
     modifier: Modifier = Modifier
 ) {
     val incomeColor = Color(0xFF4CAF50)
     val expenseColor = Color(0xFFF44336)
     val balanceColor = Color(0xFF2196F3)
-    val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+    val gridColor = onSurfaceColor.copy(alpha = 0.1f)
+    val textMeasurer = rememberTextMeasurer()
+    val textColor = MaterialTheme.colorScheme.onSurfaceVariant
 
     val allValues = points.flatMap { listOf(it.incomeAmount, it.expenseAmount, it.balanceAmount) }
-    val maxVal = maxOf(allValues.maxOrNull() ?: 1.0, 1.0)
-    val minVal = minOf(allValues.minOrNull() ?: 0.0, 0.0)
-    val range = if (maxVal - minVal == 0.0) 1.0 else maxVal - minVal
+    val minVal = allValues.minOrNull() ?: 0.0
+    val maxVal = allValues.maxOrNull() ?: 0.0
+
+    // Расчет диапазона оси Y с обязательным включением нуля (0.0)
+    val effectiveMin = minOf(minVal, 0.0)
+    val effectiveMax = maxOf(maxVal, 0.0)
+    val rawRange = effectiveMax - effectiveMin
+    val range = if (rawRange == 0.0) 1000.0 else rawRange
+    val adjustedMin = if (rawRange == 0.0) 0.0 else effectiveMin
+    val adjustedMax = if (rawRange == 0.0) 1000.0 else effectiveMax
 
     Box(modifier = modifier) {
         Canvas(
@@ -246,31 +262,83 @@ fun MonthlyBalanceCanvasChart(
                 .fillMaxSize()
                 .pointerInput(points) {
                     detectTapGestures { offset ->
-                        val width = size.width
-                        val xStep = width / (points.size - 1).coerceAtLeast(1)
-                        val index = ((offset.x + xStep / 2) / xStep).toInt().coerceIn(0, points.size - 1)
+                        val leftPadding = 56.dp.toPx()
+                        val plotWidth = size.width - leftPadding
+                        val tapX = offset.x - leftPadding
+                        val xStep = plotWidth / (points.size - 1).coerceAtLeast(1)
+                        val index = ((tapX + xStep / 2) / xStep).toInt().coerceIn(0, points.size - 1)
                         onPointSelected(points[index])
                     }
                 }
         ) {
             val width = size.width
-            val chartHeight = size.height - 24.dp.toPx()
-            val xStep = width / (points.size - 1).coerceAtLeast(1)
+            val bottomLabelHeight = 24.dp.toPx()
+            val chartHeight = size.height - bottomLabelHeight
+            val leftPadding = 56.dp.toPx()
+            val plotWidth = width - leftPadding
+            val xStep = plotWidth / (points.size - 1).coerceAtLeast(1)
 
-            val gridLines = 3
-            for (i in 0..gridLines) {
-                val y = chartHeight * (i.toFloat() / gridLines)
+            fun getY(value: Double): Float {
+                val normalized = ((value - adjustedMin) / range).toFloat()
+                return chartHeight - (normalized * chartHeight)
+            }
+
+            fun formatCompact(v: Double, symbol: String): String {
+                return when {
+                    abs(v) >= 1_000_000 -> String.format(Locale.getDefault(), "%.1fM %s", v / 1_000_000, symbol)
+                    abs(v) >= 1_000 -> String.format(Locale.getDefault(), "%.0fk %s", v / 1_000, symbol)
+                    else -> String.format(Locale.getDefault(), "%.0f %s", v, symbol)
+                }
+            }
+
+            val yZero = getY(0.0)
+
+            // Ось Y слева с 4 опорными суммами
+            val gridLevels = 3
+            for (i in 0..gridLevels) {
+                val fraction = i.toFloat() / gridLevels
+                val valLevel = adjustedMin + fraction * range
+                val y = getY(valLevel)
+
+                // Тонкая линия сетки
                 drawLine(
                     color = gridColor,
-                    start = Offset(0f, y),
+                    start = Offset(leftPadding, y),
                     end = Offset(width, y),
                     strokeWidth = 1.dp.toPx()
                 )
+
+                // Если уровень не накладывается на нулевую отметку, рисуем подпись
+                if (abs(y - yZero) > 22f) {
+                    val labelText = formatCompact(valLevel, currencySymbol)
+                    val textLayout = textMeasurer.measure(
+                        text = labelText,
+                        style = TextStyle(color = textColor, fontSize = 9.sp)
+                    )
+                    drawText(
+                        textLayoutResult = textLayout,
+                        topLeft = Offset(4.dp.toPx(), y - textLayout.size.height / 2f)
+                    )
+                }
             }
 
-            fun getY(value: Double): Float {
-                val normalized = ((value - minVal) / range).toFloat()
-                return chartHeight - (normalized * chartHeight)
+            // Явный нулевой уровень (0)
+            if (yZero in 0f..chartHeight) {
+                drawLine(
+                    color = onSurfaceColor.copy(alpha = 0.35f),
+                    start = Offset(leftPadding, yZero),
+                    end = Offset(width, yZero),
+                    strokeWidth = 1.5.dp.toPx()
+                )
+                val zeroText = "0 $currencySymbol"
+                val zeroLayout = textMeasurer.measure(
+                    text = zeroText,
+                    style = TextStyle(color = onSurfaceColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                )
+                drawText(
+                    textLayoutResult = zeroLayout,
+                    topLeft = Offset(4.dp.toPx(), yZero - zeroLayout.size.height / 2f)
+                )
             }
 
             val pathIncome = Path()
@@ -278,7 +346,7 @@ fun MonthlyBalanceCanvasChart(
             val pathBalance = Path()
 
             points.forEachIndexed { i, pt ->
-                val x = i * xStep
+                val x = leftPadding + i * xStep
                 val yInc = getY(pt.incomeAmount)
                 val yExp = getY(pt.expenseAmount)
                 val yBal = getY(pt.balanceAmount)
@@ -299,7 +367,7 @@ fun MonthlyBalanceCanvasChart(
             drawPath(path = pathBalance, color = balanceColor, style = Stroke(width = 3.5.dp.toPx()))
 
             points.forEachIndexed { i, pt ->
-                val x = i * xStep
+                val x = leftPadding + i * xStep
                 val isSelected = selectedPoint == pt
 
                 drawCircle(color = incomeColor, radius = if (isSelected) 5.dp.toPx() else 3.5.dp.toPx(), center = Offset(x, getY(pt.incomeAmount)))
@@ -317,9 +385,11 @@ fun MonthlyBalanceCanvasChart(
             }
         }
 
+        // Подписи месяцев снизу с учетом отступа оси Y
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(start = 56.dp)
                 .align(Alignment.BottomCenter),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {

@@ -29,5 +29,8 @@ data class WalletEntity(
     val balance: Double = 0.0,
 
     @ColumnInfo(name = "excludeFromBalance")
-    val excludeFromBalance: Boolean = false
+    val excludeFromBalance: Boolean = false,
+
+    @ColumnInfo(name = "sortOrder")
+    val sortOrder: Int = 0
 )

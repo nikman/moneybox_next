@@ -17,10 +17,10 @@ import com.niku.moneybox.core.database.model.TransactionTagCrossRef
 import com.niku.moneybox.core.database.model.WalletEntity
 
 /**
- * Главный класс базы данных Room модуля :core:database (Версия 4).
+ * Главный класс базы данных Room модуля :core:database (Версия 6).
  *
  * Регистрирует сущности:
- * - [WalletEntity] (версия 4: поле excludeFromBalance)
+ * - [WalletEntity] (версия 6: поле sortOrder)
  * - [TransactionEntity]
  * - [CategoryEntity]
  * - [PaymentTemplateEntity]
@@ -36,7 +36,7 @@ import com.niku.moneybox.core.database.model.WalletEntity
         TagEntity::class,
         TransactionTagCrossRef::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(RoomConverters::class)

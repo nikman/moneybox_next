@@ -45,14 +45,16 @@ import com.niku.wallets.ui.getDisplayName
 fun AddWalletDialog(
     initialWallet: WalletEntity? = null,
     defaultCurrency: String = "RUB",
+    nextSortOrder: Int = 1,
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)? = null,
-    onConfirm: (name: String, type: WalletType, currency: String, initialBalance: Double, excludeFromBalance: Boolean) -> Unit
+    onConfirm: (name: String, type: WalletType, currency: String, initialBalance: Double, excludeFromBalance: Boolean, sortOrder: Int) -> Unit
 ) {
     var name by remember { mutableStateOf(initialWallet?.name ?: "") }
     var selectedType by remember { mutableStateOf(initialWallet?.type ?: WalletType.DEBIT_CARD) }
     var currency by remember { mutableStateOf(initialWallet?.currency ?: defaultCurrency) }
     var balanceText by remember { mutableStateOf(initialWallet?.balance?.toString() ?: "0") }
+    var sortOrderText by remember { mutableStateOf(initialWallet?.sortOrder?.toString() ?: nextSortOrder.toString()) }
     var excludeFromBalance by remember { mutableStateOf(initialWallet?.excludeFromBalance ?: false) }
     var expanded by remember { mutableStateOf(false) }
 
@@ -146,6 +148,17 @@ fun AddWalletDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                OutlinedTextField(
+                    value = sortOrderText,
+                    onValueChange = { sortOrderText = it },
+                    label = { Text("Порядок сортировки") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -170,7 +183,8 @@ fun AddWalletDialog(
                 onClick = {
                     if (name.isNotBlank()) {
                         val balance = balanceText.toDoubleOrNull() ?: 0.0
-                        onConfirm(name.trim(), selectedType, currency.trim().ifEmpty { defaultCurrency }, balance, excludeFromBalance)
+                        val sortOrder = sortOrderText.toIntOrNull() ?: nextSortOrder
+                        onConfirm(name.trim(), selectedType, currency.trim().ifEmpty { defaultCurrency }, balance, excludeFromBalance, sortOrder)
                     }
                 }
             ) {

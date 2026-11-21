@@ -20,13 +20,13 @@ interface WalletDao {
      * Получить список всех кошельков с их текущим обновленным балансом.
      * Используется при запуске приложения для моментального отображения балансов (холодный старт).
      */
-    @Query("SELECT * FROM wallets ORDER BY id ASC")
+    @Query("SELECT * FROM wallets ORDER BY sortOrder ASC, id ASC")
     fun getWalletsFlow(): Flow<List<WalletEntity>>
 
     @Query("SELECT * FROM wallets WHERE id = :id")
     suspend fun getWalletById(id: Long): WalletEntity?
 
-    @Query("SELECT * FROM wallets")
+    @Query("SELECT * FROM wallets ORDER BY sortOrder ASC, id ASC")
     suspend fun getAllWallets(): List<WalletEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -37,6 +37,9 @@ interface WalletDao {
 
     @Update
     suspend fun updateWallet(wallet: WalletEntity): Int
+
+    @Update
+    suspend fun updateWallets(wallets: List<WalletEntity>)
 
     @Delete
     suspend fun deleteWallet(wallet: WalletEntity): Int

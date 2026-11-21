@@ -128,7 +128,8 @@ class CsvImporter(
                         name = name,
                         type = WalletType.DEBIT_CARD,
                         currency = currency,
-                        balance = 0.0
+                        balance = 0.0,
+                        sortOrder = existingWallets.size + newWalletsCreated + 1
                     )
                     val newId = walletDao.insertWallet(newWallet)
                     val created = newWallet.copy(id = newId)

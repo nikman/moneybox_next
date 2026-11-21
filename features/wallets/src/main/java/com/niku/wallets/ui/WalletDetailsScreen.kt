@@ -278,19 +278,21 @@ fun WalletDetailsScreen(
         AddWalletDialog(
             initialWallet = wallet,
             defaultCurrency = uiState.defaultCurrency,
+            nextSortOrder = uiState.wallets.size + 1,
             onDismiss = { showEditWalletDialog = false },
             onDelete = {
                 viewModel.deleteWallet(wallet.id)
                 showEditWalletDialog = false
                 onBack()
             },
-            onConfirm = { name, type, currency, balance, excludeFromBalance ->
+            onConfirm = { name, type, currency, balance, excludeFromBalance, sortOrder ->
                 val updated = wallet.copy(
                     name = name,
                     type = type,
                     currency = currency,
                     balance = balance,
-                    excludeFromBalance = excludeFromBalance
+                    excludeFromBalance = excludeFromBalance,
+                    sortOrder = sortOrder
                 )
                 viewModel.updateWallet(updated)
                 showEditWalletDialog = false
