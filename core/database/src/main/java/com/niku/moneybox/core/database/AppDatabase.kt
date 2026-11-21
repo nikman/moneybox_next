@@ -36,7 +36,7 @@ import com.niku.moneybox.core.database.model.WalletEntity
         TagEntity::class,
         TransactionTagCrossRef::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(RoomConverters::class)
@@ -75,10 +75,10 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("INSERT INTO categories (name, type, icon, color) VALUES ('Подарки', 'INCOME', 'card_giftcard', '#E53935')")
 
                 // Начальные популярные теги
-                db.execSQL("INSERT INTO tags (name) VALUES ('срочно')")
-                db.execSQL("INSERT INTO tags (name) VALUES ('отпуск')")
-                db.execSQL("INSERT INTO tags (name) VALUES ('семья')")
-                db.execSQL("INSERT INTO tags (name) VALUES ('работа')")
+                db.execSQL("INSERT INTO tags (name, usageCount) VALUES ('срочно', 0)")
+                db.execSQL("INSERT INTO tags (name, usageCount) VALUES ('отпуск', 0)")
+                db.execSQL("INSERT INTO tags (name, usageCount) VALUES ('семья', 0)")
+                db.execSQL("INSERT INTO tags (name, usageCount) VALUES ('работа', 0)")
             }
         }
     }

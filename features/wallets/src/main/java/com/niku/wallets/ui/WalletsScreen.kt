@@ -90,6 +90,7 @@ fun WalletsScreen(
 
     var showAddWalletDialog by remember { mutableStateOf(false) }
     var pendingEditWallet by remember { mutableStateOf<WalletEntity?>(null) }
+    var selectedWalletIdForDetails by remember { mutableStateOf<Long?>(null) }
     var showAddTransactionDialog by remember { mutableStateOf(false) }
     var showTransferDialog by remember { mutableStateOf(false) }
     var showCategoriesScreen by remember { mutableStateOf(false) }
@@ -113,6 +114,21 @@ fun WalletsScreen(
             onBack = { showCategoriesScreen = false }
         )
         return
+    }
+
+    if (selectedWalletIdForDetails != null) {
+        val currentWalletId = selectedWalletIdForDetails!!
+        val currentWallet = uiState.wallets.find { it.id == currentWalletId }
+        if (currentWallet != null) {
+            WalletDetailsScreen(
+                walletId = currentWalletId,
+                viewModel = viewModel,
+                onBack = { selectedWalletIdForDetails = null }
+            )
+            return
+        } else {
+            selectedWalletIdForDetails = null
+        }
     }
 
     val exportLauncher = rememberLauncherForActivityResult(
@@ -223,7 +239,7 @@ fun WalletsScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Счета и кошельки (нажмите для редактирования)",
+                text = "Счета и кошельки",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
             )
@@ -243,7 +259,7 @@ fun WalletsScreen(
                     items(uiState.wallets, key = { it.id }) { wallet ->
                         WalletCardItem(
                             wallet = wallet,
-                            onClick = { pendingEditWallet = wallet }
+                            onClick = { selectedWalletIdForDetails = wallet.id }
                         )
                     }
                 }
@@ -382,31 +398,25 @@ fun WalletsScreen(
 
     if (pendingEditTransaction != null) {
         val oldTx = pendingEditTransaction!!
-        val walletId = oldTx.fromWalletId ?: oldTx.toWalletId ?: 0L
         val currentTxTags = txWithTagsMap[oldTx.id]?.tags?.map { it.id } ?: emptyList()
 
         AddTransactionDialog(
             wallets = uiState.wallets,
             categories = uiState.categories,
             allTags = uiState.tags,
-            initialAmount = oldTx.amount,
-            initialType = oldTx.type,
-            initialWalletId = walletId,
-            initialCategoryId = oldTx.categoryId,
-            initialComment = oldTx.comment,
-            initialDate = oldTx.date,
+            initialTransaction = oldTx,
             initialSelectedTagIds = currentTxTags,
             isEditing = true,
             onDismiss = { pendingEditTransaction = null },
             onCreateNewTag = { tagName, callback ->
                 viewModel.createTag(tagName, callback)
             },
-            onConfirm = { amount, type, selectedWalletId, categoryId, comment, date, tagIds ->
+            onConfirm = { amount, type, fromWalletId, toWalletId, categoryId, comment, date, tagIds ->
                 val newTx = oldTx.copy(
                     amount = amount,
                     type = type,
-                    fromWalletId = if (type == TransactionType.EXPENSE) selectedWalletId else null,
-                    toWalletId = if (type == TransactionType.INCOME) selectedWalletId else null,
+                    fromWalletId = fromWalletId,
+                    toWalletId = toWalletId,
                     categoryId = categoryId,
                     comment = comment,
                     date = date
@@ -464,8 +474,8 @@ fun WalletsScreen(
             onCreateNewTag = { tagName, callback ->
                 viewModel.createTag(tagName, callback)
             },
-            onConfirm = { amount, type, walletId, categoryId, comment, date, tagIds ->
-                viewModel.addTransaction(amount, type, walletId, categoryId, comment, date, tagIds)
+            onConfirm = { amount, type, fromWalletId, toWalletId, categoryId, comment, date, tagIds ->
+                viewModel.addTransaction(amount, type, fromWalletId, toWalletId, categoryId, comment, date, tagIds)
                 showAddTransactionDialog = false
             }
         )
@@ -549,7 +559,7 @@ fun WalletCardItem(
                 }
             }
             Text(
-                text = wallet.type.name,
+                text = wallet.type.getDisplayName(),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
@@ -591,13 +601,24 @@ fun TransactionItem(
     category: CategoryEntity?,
     tags: List<TagEntity> = emptyList(),
     walletCurrency: String,
+    currentWalletId: Long? = null,
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val (typeText, color, sign) = when (transaction.type) {
         TransactionType.INCOME -> Triple("Доход", Color(0xFF2E7D32), "+")
         TransactionType.EXPENSE -> Triple("Расход", Color(0xFFC62828), "-")
-        TransactionType.TRANSFER -> Triple("Перевод", Color(0xFF1565C0), "⇄ ")
+        TransactionType.TRANSFER -> {
+            if (currentWalletId != null) {
+                if (transaction.toWalletId == currentWalletId) {
+                    Triple("Входящий перевод", Color(0xFF2E7D32), "+")
+                } else {
+                    Triple("Исходящий перевод", Color(0xFFC62828), "-")
+                }
+            } else {
+                Triple("Перевод", Color(0xFF1565C0), "⇄ ")
+            }
+        }
     }
 
     val displayTitle = category?.name ?: transaction.comment ?: typeText

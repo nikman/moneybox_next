@@ -223,7 +223,8 @@ class WalletsViewModel(
     fun addTransaction(
         amount: Double,
         type: TransactionType,
-        walletId: Long,
+        fromWalletId: Long?,
+        toWalletId: Long?,
         categoryId: Long? = null,
         comment: String? = null,
         date: Long = System.currentTimeMillis(),
@@ -232,8 +233,8 @@ class WalletsViewModel(
         viewModelScope.launch {
             runCatching {
                 val transaction = TransactionEntity(
-                    fromWalletId = if (type == TransactionType.EXPENSE) walletId else null,
-                    toWalletId = if (type == TransactionType.INCOME) walletId else null,
+                    fromWalletId = fromWalletId,
+                    toWalletId = toWalletId,
                     amount = amount,
                     type = type,
                     categoryId = categoryId,
@@ -243,6 +244,27 @@ class WalletsViewModel(
                 transactionDao.insertTransactionWithTags(transaction, selectedTagIds)
             }
         }
+    }
+
+    fun addTransaction(
+        amount: Double,
+        type: TransactionType,
+        walletId: Long,
+        categoryId: Long? = null,
+        comment: String? = null,
+        date: Long = System.currentTimeMillis(),
+        selectedTagIds: List<Long> = emptyList()
+    ) {
+        addTransaction(
+            amount = amount,
+            type = type,
+            fromWalletId = if (type == TransactionType.EXPENSE) walletId else null,
+            toWalletId = if (type == TransactionType.INCOME) walletId else null,
+            categoryId = categoryId,
+            comment = comment,
+            date = date,
+            selectedTagIds = selectedTagIds
+        )
     }
 
     fun deleteTransaction(transaction: TransactionEntity) {

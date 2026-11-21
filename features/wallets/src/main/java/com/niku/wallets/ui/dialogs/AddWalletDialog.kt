@@ -35,6 +35,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.niku.moneybox.core.database.model.WalletEntity
 import com.niku.moneybox.core.database.model.WalletType
+import com.niku.wallets.ui.getDisplayName
 
 /**
  * Диалоговое окно создания или редактирования кошелька с возможностью исключения из общего баланса и отчетов.
@@ -94,7 +95,7 @@ fun AddWalletDialog(
                     onExpandedChange = { expanded = !expanded }
                 ) {
                     OutlinedTextField(
-                        value = selectedType.name,
+                        value = selectedType.getDisplayName(),
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Тип счета") },
@@ -110,7 +111,7 @@ fun AddWalletDialog(
                     ) {
                         WalletType.entries.forEach { type ->
                             DropdownMenuItem(
-                                text = { Text(type.name) },
+                                text = { Text(type.getDisplayName()) },
                                 onClick = {
                                     selectedType = type
                                     expanded = false

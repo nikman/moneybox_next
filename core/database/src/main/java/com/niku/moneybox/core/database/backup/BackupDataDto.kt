@@ -11,7 +11,7 @@ import com.niku.moneybox.core.database.model.WalletEntity
  * DTO модель полной резервной копии данных приложения MoneyBox.
  */
 data class BackupDataDto(
-    val version: Int = 3,
+    val version: Int = 4,
     val createdAt: Long = System.currentTimeMillis(),
     val wallets: List<WalletEntity> = emptyList(),
     val transactions: List<TransactionEntity> = emptyList(),

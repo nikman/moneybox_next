@@ -148,8 +148,8 @@ fun TemplatesScreen(
             onCreateNewTag = { tagName, callback ->
                 viewModel.createTag(tagName, callback)
             },
-            onConfirm = { amount, type, walletId, categoryId, comment, date, selectedTagIds ->
-                viewModel.addTransaction(amount, type, walletId, categoryId, comment, date, selectedTagIds)
+            onConfirm = { amount, type, fromWalletId, toWalletId, categoryId, comment, date, selectedTagIds ->
+                viewModel.addTransaction(amount, type, fromWalletId, toWalletId, categoryId, comment, date, selectedTagIds)
                 pendingQuickTransactionTemplate = null
             }
         )

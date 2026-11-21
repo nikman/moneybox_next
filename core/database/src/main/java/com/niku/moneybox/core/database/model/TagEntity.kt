@@ -7,6 +7,7 @@ import androidx.room.PrimaryKey
 
 /**
  * Сущность метки/тега операций (например: #продукты, #подарок, #такси).
+ * Содержит статистику [usageCount] для умной сортировки по популярности.
  */
 @Entity(
     tableName = "tags",
@@ -20,5 +21,8 @@ data class TagEntity(
     val id: Long = 0,
 
     @ColumnInfo(name = "name")
-    val name: String
+    val name: String,
+
+    @ColumnInfo(name = "usageCount")
+    val usageCount: Int = 0
 )

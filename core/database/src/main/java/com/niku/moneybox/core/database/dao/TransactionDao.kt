@@ -53,11 +53,17 @@ interface TransactionDao {
 
     // ---------- ТЕГИ (TAGS) ----------
 
-    @Query("SELECT * FROM tags ORDER BY name ASC")
+    @Query("SELECT * FROM tags ORDER BY usageCount DESC, name ASC")
     fun getTagsFlow(): Flow<List<TagEntity>>
 
-    @Query("SELECT * FROM tags")
+    @Query("SELECT * FROM tags ORDER BY usageCount DESC, name ASC")
     suspend fun getAllTags(): List<TagEntity>
+
+    @Query("UPDATE tags SET usageCount = usageCount + 1 WHERE id IN (:tagIds)")
+    suspend fun incrementTagUsage(tagIds: List<Long>)
+
+    @Query("SELECT tagId FROM transaction_tag_cross_ref WHERE transactionId = :transactionId")
+    suspend fun getTagIdsForTransaction(transactionId: Long): List<Long>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTag(tag: TagEntity): Long
@@ -91,7 +97,7 @@ interface TransactionDao {
     suspend fun updateWalletBalance(walletId: Long, delta: Double): Int
 
     /**
-     * Добавление транзакции с привязкой тегов и пересчетом баланса в единой SQL-транзакции.
+     * Добавление транзакции с привязкой тегов, инкрементом популярности тегов и пересчетом баланса в единой SQL-транзакции.
      */
     @Transaction
     suspend fun insertTransactionWithTags(
@@ -102,12 +108,13 @@ interface TransactionDao {
         if (tagIds.isNotEmpty()) {
             val refs = tagIds.map { tagId -> TransactionTagCrossRef(transactionId = txId, tagId = tagId) }
             insertTransactionTagCrossRefs(refs)
+            incrementTagUsage(tagIds)
         }
         return txId
     }
 
     /**
-     * Обновление транзакции с обновлением связей тегов и баланса в единой SQL-транзакции.
+     * Обновление транзакции с обновлением связей тегов, инкрементом популярности добавленных тегов и баланса в единой SQL-транзакции.
      */
     @Transaction
     suspend fun updateTransactionWithTags(
@@ -115,11 +122,17 @@ interface TransactionDao {
         newTransaction: TransactionEntity,
         tagIds: List<Long>
     ): Long {
+        val oldTagIds = getTagIdsForTransaction(oldTransaction.id)
+        val addedTagIds = tagIds.filter { it !in oldTagIds }
+
         deleteTransactionTagCrossRefs(oldTransaction.id)
         val newTxId = updateTransactionAndRecalculateBalance(oldTransaction, newTransaction)
         if (tagIds.isNotEmpty()) {
             val refs = tagIds.map { tagId -> TransactionTagCrossRef(transactionId = newTxId, tagId = tagId) }
             insertTransactionTagCrossRefs(refs)
+        }
+        if (addedTagIds.isNotEmpty()) {
+            incrementTagUsage(addedTagIds)
         }
         return newTxId
     }
