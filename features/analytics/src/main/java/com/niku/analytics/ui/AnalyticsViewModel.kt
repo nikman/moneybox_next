@@ -53,7 +53,7 @@ private val ChartPalette = listOf(
 )
 
 /**
- * ViewModel модуля аналитики с мультивалютным пересчетом данных.
+ * ViewModel модуля аналитики с мультивалютным пересчетом данных и фильтрацией скрытых счетов.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AnalyticsViewModel(
@@ -122,6 +122,20 @@ class AnalyticsViewModel(
         val defaultCurrency = flows[6] as String
         val rates = flows[7] as Map<String, Double>
 
+        // Исключаем скроенные кошельки и транзакции по ним
+        val excludedWalletIds = wallets.filter { it.excludeFromBalance }.map { it.id }.toSet()
+        val activeWallets = wallets.filter { !it.excludeFromBalance }
+
+        val activePeriodTransactions = periodTransactions.filter { tx ->
+            val wId = tx.fromWalletId ?: tx.toWalletId
+            wId == null || !excludedWalletIds.contains(wId)
+        }
+
+        val activeAllTransactions = allTransactions.filter { tx ->
+            val wId = tx.fromWalletId ?: tx.toWalletId
+            wId == null || !excludedWalletIds.contains(wId)
+        }
+
         val walletMap = wallets.associateBy { it.id }
         val categoryMap = categories.associateBy { it.id }
 
@@ -131,18 +145,18 @@ class AnalyticsViewModel(
             return CurrencyFormatter.convert(this.amount, currency, defaultCurrency, rates)
         }
 
-        // Расчет общих сумм за период в базовой валюте
-        val totalIncome = periodTransactions
+        // Расчет общих сумм только по активным счетам
+        val totalIncome = activePeriodTransactions
             .filter { it.type == TransactionType.INCOME }
             .sumOf { it.getAmountInDefault() }
 
-        val totalExpense = periodTransactions
+        val totalExpense = activePeriodTransactions
             .filter { it.type == TransactionType.EXPENSE }
             .sumOf { it.getAmountInDefault() }
 
         val netBalance = totalIncome - totalExpense
 
-        val filteredTransactions = periodTransactions.filter { it.type == type }
+        val filteredTransactions = activePeriodTransactions.filter { it.type == type }
         val targetTotal = if (type == TransactionType.INCOME) totalIncome else totalExpense
 
         val categoryGrouped = filteredTransactions.groupBy { it.categoryId }
@@ -165,8 +179,8 @@ class AnalyticsViewModel(
             )
         }.sortedByDescending { it.amount }
 
-        val trendPoints = calculateTrendPoints(periodTransactions, period, walletMap, defaultCurrency, rates)
-        val monthlyBalancePoints = calculate12MonthBalancePoints(wallets, allTransactions, defaultCurrency, rates)
+        val trendPoints = calculateTrendPoints(activePeriodTransactions, period, walletMap, defaultCurrency, rates)
+        val monthlyBalancePoints = calculate12MonthBalancePoints(activeWallets, activeAllTransactions, defaultCurrency, rates)
 
         AnalyticsUiState(
             selectedPeriod = period,
@@ -247,7 +261,6 @@ class AnalyticsViewModel(
 
         val walletMap = wallets.associateBy { it.id }
 
-        // Общий баланс всех кошельков в базовой валюте
         val currentTotalBalance = wallets.sumOf { wallet ->
             CurrencyFormatter.convert(wallet.balance, wallet.currency, defaultCurrency, rates)
         }

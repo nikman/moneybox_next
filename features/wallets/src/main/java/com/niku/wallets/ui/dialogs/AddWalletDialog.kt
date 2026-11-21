@@ -1,5 +1,6 @@
 package com.niku.wallets.ui.dialogs
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,10 +8,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -34,7 +37,7 @@ import com.niku.moneybox.core.database.model.WalletEntity
 import com.niku.moneybox.core.database.model.WalletType
 
 /**
- * Диалоговое окно создания или редактирования кошелька с поддержкой удаления.
+ * Диалоговое окно создания или редактирования кошелька с возможностью исключения из общего баланса и отчетов.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,12 +46,13 @@ fun AddWalletDialog(
     defaultCurrency: String = "RUB",
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)? = null,
-    onConfirm: (name: String, type: WalletType, currency: String, initialBalance: Double) -> Unit
+    onConfirm: (name: String, type: WalletType, currency: String, initialBalance: Double, excludeFromBalance: Boolean) -> Unit
 ) {
     var name by remember { mutableStateOf(initialWallet?.name ?: "") }
     var selectedType by remember { mutableStateOf(initialWallet?.type ?: WalletType.DEBIT_CARD) }
     var currency by remember { mutableStateOf(initialWallet?.currency ?: defaultCurrency) }
     var balanceText by remember { mutableStateOf(initialWallet?.balance?.toString() ?: "0") }
+    var excludeFromBalance by remember { mutableStateOf(initialWallet?.excludeFromBalance ?: false) }
     var expanded by remember { mutableStateOf(false) }
 
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
@@ -138,6 +142,26 @@ fun AddWalletDialog(
                         modifier = Modifier.weight(1f)
                     )
                 }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { excludeFromBalance = !excludeFromBalance }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = excludeFromBalance,
+                        onCheckedChange = { excludeFromBalance = it }
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Не учитывать в общем балансе и отчетах",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
             }
         },
         confirmButton = {
@@ -145,7 +169,7 @@ fun AddWalletDialog(
                 onClick = {
                     if (name.isNotBlank()) {
                         val balance = balanceText.toDoubleOrNull() ?: 0.0
-                        onConfirm(name.trim(), selectedType, currency.trim().ifEmpty { defaultCurrency }, balance)
+                        onConfirm(name.trim(), selectedType, currency.trim().ifEmpty { defaultCurrency }, balance, excludeFromBalance)
                     }
                 }
             ) {
@@ -166,7 +190,6 @@ fun AddWalletDialog(
         }
     )
 
-    // Подтверждение удаления кошелька и всех его транзакций
     if (showDeleteConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },

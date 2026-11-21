@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -76,7 +77,7 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Главный экран кошельков с поддержкой импорта выписок CSV.
+ * Главный экран кошельков с визуальной индикацией исключенных из общего баланса счетов.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -337,12 +338,13 @@ fun WalletsScreen(
                 viewModel.deleteWallet(walletToEdit.id)
                 pendingEditWallet = null
             },
-            onConfirm = { name, type, currency, balance ->
+            onConfirm = { name, type, currency, balance, excludeFromBalance ->
                 val updated = walletToEdit.copy(
                     name = name,
                     type = type,
                     currency = currency,
-                    balance = balance
+                    balance = balance,
+                    excludeFromBalance = excludeFromBalance
                 )
                 viewModel.updateWallet(updated)
                 pendingEditWallet = null
@@ -446,8 +448,8 @@ fun WalletsScreen(
         AddWalletDialog(
             defaultCurrency = uiState.defaultCurrency,
             onDismiss = { showAddWalletDialog = false },
-            onConfirm = { name, type, currency, initialBalance ->
-                viewModel.createWallet(name, type, currency, initialBalance)
+            onConfirm = { name, type, currency, initialBalance, excludeFromBalance ->
+                viewModel.createWallet(name, type, currency, initialBalance, excludeFromBalance)
                 showAddWalletDialog = false
             }
         )
@@ -514,19 +516,38 @@ fun WalletCardItem(
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val cardAlpha = if (wallet.excludeFromBalance) 0.65f else 1.0f
+
     Card(
         modifier = modifier
             .width(160.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = cardAlpha)
+        )
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            Text(
-                text = wallet.name,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                maxLines = 1
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = wallet.name,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f)
+                )
+                if (wallet.excludeFromBalance) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = "Скрыт из общего баланса",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
             Text(
                 text = wallet.type.name,
                 style = MaterialTheme.typography.labelSmall,
@@ -536,7 +557,7 @@ fun WalletCardItem(
             Text(
                 text = String.format(Locale.getDefault(), "%,.2f %s", wallet.balance, CurrencyFormatter.getSymbol(wallet.currency)),
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.primary
+                color = if (wallet.excludeFromBalance) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
             )
         }
     }

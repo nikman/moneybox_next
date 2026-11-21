@@ -7,11 +7,8 @@ import androidx.room.PrimaryKey
 /**
  * Сущность Кошелька / Счета в БД Room.
  *
- * Оптимизация холодного запуска:
- * Поле [balance] хранит актуальный баланс кошелька, который
- * атомарно обновляется внутри SQL-транзакции при любых изменениях транзакций.
- * Благодаря этому при старте приложения список кошельков с их текущим балансом
- * загружается мгновенно (O(1)) без обращения к истории транзакций и их пересчета.
+ * Флаг [excludeFromBalance] позволяет исключать накопительные счета или резервные фонды
+ * из суммарных итогов на главном экране и в аналитических отчетах.
  */
 @Entity(tableName = "wallets")
 data class WalletEntity(
@@ -29,5 +26,8 @@ data class WalletEntity(
     val currency: String,
 
     @ColumnInfo(name = "balance")
-    val balance: Double = 0.0
+    val balance: Double = 0.0,
+
+    @ColumnInfo(name = "excludeFromBalance")
+    val excludeFromBalance: Boolean = false
 )

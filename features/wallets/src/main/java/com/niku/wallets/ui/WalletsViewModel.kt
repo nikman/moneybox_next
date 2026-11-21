@@ -29,7 +29,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
- * Состояние UI для экрана управления кошельками (с поддержкой тегов).
+ * Состояние UI для экрана управления кошельками.
  */
 data class WalletsUiState(
     val wallets: List<WalletEntity> = emptyList(),
@@ -88,9 +88,12 @@ class WalletsViewModel(
 
         val transactions = txsWithTags.map { it.transaction }
 
-        val total = wallets.sumOf { wallet ->
-            CurrencyFormatter.convert(wallet.balance, wallet.currency, defaultCurrency, rates)
-        }
+        // Исключаем кошельки с флагом excludeFromBalance из общего итогового баланса
+        val total = wallets
+            .filter { !it.excludeFromBalance }
+            .sumOf { wallet ->
+                CurrencyFormatter.convert(wallet.balance, wallet.currency, defaultCurrency, rates)
+            }
 
         WalletsUiState(
             wallets = wallets,
@@ -184,7 +187,8 @@ class WalletsViewModel(
         name: String,
         type: WalletType,
         currency: String = "RUB",
-        initialBalance: Double = 0.0
+        initialBalance: Double = 0.0,
+        excludeFromBalance: Boolean = false
     ) {
         viewModelScope.launch {
             runCatching {
@@ -192,7 +196,8 @@ class WalletsViewModel(
                     name = name,
                     type = type,
                     currency = currency,
-                    balance = initialBalance
+                    balance = initialBalance,
+                    excludeFromBalance = excludeFromBalance
                 )
                 walletDao.insertWallet(wallet)
             }
@@ -313,9 +318,6 @@ class WalletsViewModel(
         }
     }
 
-    /**
-     * Умный импорт из CSV выписки.
-     */
     fun importCsv(context: Context, uri: Uri, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             runCatching {
