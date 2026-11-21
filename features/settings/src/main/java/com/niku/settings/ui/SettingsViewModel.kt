@@ -10,6 +10,7 @@ import com.niku.moneybox.core.database.backup.BackupManager
 import com.niku.moneybox.core.database.csv.CsvImporter
 import com.niku.network.repository.CurrencyRepository
 import com.niku.preferences.AppPreferences
+import com.niku.preferences.AppThemeMode
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -25,6 +26,14 @@ class SettingsViewModel(
     private val backupManager = BackupManager(database)
 
     val defaultCurrency: StateFlow<String> = appPreferences.defaultCurrency
+    val themeMode: StateFlow<AppThemeMode> = appPreferences.themeMode
+
+    /**
+     * Сменить тему оформления приложения.
+     */
+    fun setThemeMode(mode: AppThemeMode) {
+        appPreferences.setThemeMode(mode)
+    }
 
     /**
      * Сменить основную базовую валюту приложения.

@@ -17,6 +17,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -40,6 +42,7 @@ import com.niku.moneybox.core.database.AppDatabase
 import com.niku.moneybox.ui.theme.MoneyboxTheme
 import com.niku.network.RetrofitClient
 import com.niku.preferences.AppPreferences
+import com.niku.preferences.AppThemeMode
 import com.niku.settings.ui.SettingsScreen
 import com.niku.settings.ui.SettingsViewModel
 import com.niku.settings.ui.SettingsViewModelFactory
@@ -92,7 +95,15 @@ class MainActivity : FragmentActivity() {
         val currencyRepository = RetrofitClient.getCurrencyRepository(applicationContext)
 
         setContent {
-            MoneyboxTheme {
+            val themeMode by appPreferences.themeMode.collectAsState()
+            val systemDark = isSystemInDarkTheme()
+            val useDarkTheme = when (themeMode) {
+                AppThemeMode.LIGHT -> false
+                AppThemeMode.DARK -> true
+                AppThemeMode.SYSTEM -> systemDark
+            }
+
+            MoneyboxTheme(darkTheme = useDarkTheme) {
                 val navController = rememberNavController()
 
                 // Инициализация ViewModels для каждого экрана

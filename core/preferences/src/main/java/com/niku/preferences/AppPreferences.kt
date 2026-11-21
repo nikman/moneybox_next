@@ -28,6 +28,24 @@ class AppPreferences private constructor(context: Context) {
     private val _cachedRates = MutableStateFlow<Map<String, Double>>(loadCachedRates())
     val cachedRates: StateFlow<Map<String, Double>> = _cachedRates.asStateFlow()
 
+    private val _themeMode = MutableStateFlow(
+        try {
+            val savedName = prefs.getString(KEY_THEME_MODE, AppThemeMode.SYSTEM.name)
+            AppThemeMode.valueOf(savedName ?: AppThemeMode.SYSTEM.name)
+        } catch (e: Exception) {
+            AppThemeMode.SYSTEM
+        }
+    )
+    val themeMode: StateFlow<AppThemeMode> = _themeMode.asStateFlow()
+
+    /**
+     * Установить режим темы оформления приложения.
+     */
+    fun setThemeMode(mode: AppThemeMode) {
+        prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
+        _themeMode.value = mode
+    }
+
     /**
      * Установить основную базовую валюту приложения.
      */
@@ -59,6 +77,7 @@ class AppPreferences private constructor(context: Context) {
         private const val PREFS_NAME = "moneybox_preferences"
         private const val KEY_DEFAULT_CURRENCY = "key_default_currency"
         private const val KEY_CACHED_RATES = "key_cached_rates"
+        private const val KEY_THEME_MODE = "key_theme_mode"
         private const val DEFAULT_CURRENCY_VALUE = "RUB"
 
         @Volatile

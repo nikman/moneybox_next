@@ -9,7 +9,9 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.view.WindowInsetsControllerCompat
 
 private val DarkColorScheme = darkColorScheme(
     primary = Purple80,
@@ -48,6 +50,15 @@ fun MoneyboxTheme(
 
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
+    }
+
+    val context = LocalContext.current
+    SideEffect {
+        (context as? Activity)?.window?.let { window ->
+            WindowInsetsControllerCompat(window, window.decorView).apply {
+                isAppearanceLightStatusBars = !darkTheme
+            }
+        }
     }
 
     MaterialTheme(
